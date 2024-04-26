@@ -6,9 +6,7 @@ const port = process.env.PORT || 8000;
 
 app.listen(port, () => console.log(`Server listening on port ${port}`));
 
-app.get("/", (_, res) =>
-  res.send("To use, please GET /verify?proof=[serialized pcd]")
-);
+app.get("/", (_, res) => res.send("To use, please GET /verify?proof=<proof>"));
 
 app.get("/verify", async (req, res) => {
   const { proof } = req.query;
