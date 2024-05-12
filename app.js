@@ -6,23 +6,22 @@ const port = process.env.PORT || 8000;
 
 app.listen(port, () => console.log(`Server listening on port ${port}`));
 
-app.get("/", (_, res) => res.send("To use, please GET /verify?proof=<proof>"));
-
-app.get("/verify", async (req, res) => {
-  const { proof } = req.query;
+app.post("/", async (req, res) => {
+  const proof = req.body;
 
   if (!proof || !(typeof proof === "string")) {
     console.error(`[ERROR] No proof specified`);
     return res
       .status(400)
-      .json({ success: false, error: "No proof specified in query parameter" });
+      .json({ success: false, error: "No proof specified in POST body" });
   }
 
   try {
     const {
       claim: { partialTicket, nullifierHash },
     } = await authenticate(proof, "", ETH_BERLIN_CONFIG);
-    res.json({ success: true, userTicket: partialTicket, nullifierHash });
+    // TODO: Return some error code if isRevoked is true
+    res.json({ success: true, userTicket: partialTicket, nullifierHash }); // TODO: Return TicketID explicitly here
   } catch (e) {
     console.error(`[ERROR] ${e}`);
     res.status(500).json({
