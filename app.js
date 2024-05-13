@@ -1,27 +1,32 @@
 const express = require("express");
-const { authenticate } = require("@pcd/zuauth");
+const  {
+  ZKEdDSAEventTicketPCD,
+  ZKEdDSAEventTicketPCDPackage,
+} = require("@pcd/zk-eddsa-event-ticket-pcd");
+const { isEqualEdDSAPublicKey } = require("@pcd/eddsa-pcd");
 
 const app = express();
 const port = process.env.PORT || 8000;
+
+app.use(express.json());
 
 app.listen(port, () => console.log(`Server listening on port ${port}`));
 
 app.post("/", async (req, res) => {
   const proof = req.body;
 
-  if (!proof || !(typeof proof === "string")) {
+  if (!proof) {
     console.error(`[ERROR] No proof specified`);
     return res
       .status(400)
       .json({ success: false, error: "No proof specified in POST body" });
   }
 
+  console.log(`[INFO] Received proof: ${JSON.stringify(proof)}`);
+
   try {
-    const {
-      claim: { partialTicket, nullifierHash },
-    } = await authenticate(proof, "", ETH_BERLIN_CONFIG);
-    // TODO: Return some error code if isRevoked is true
-    res.json({ success: true, userTicket: partialTicket, nullifierHash }); // TODO: Return TicketID explicitly here
+    const pcd = await authenticate(proof);
+    res.json({ success: true });
   } catch (e) {
     console.error(`[ERROR] ${e}`);
     res.status(500).json({
@@ -30,6 +35,46 @@ app.post("/", async (req, res) => {
     });
   }
 });
+
+async function authenticate(pcdData) {
+  const { id, claim, proof } = pcdData;
+  if (!id || !claim || !proof) {
+    throw new Error("PCD data is incomplete");
+  }
+
+  const pcd = new ZKEdDSAEventTicketPCD(id, claim, proof);
+
+  if (!(await ZKEdDSAEventTicketPCDPackage.verify(pcd))) {
+    throw new Error("ZK ticket PCD is not valid");
+  }
+
+  const publicKeys = ETH_BERLIN_CONFIG.map((em) => em.publicKey);
+
+  if (
+    publicKeys.length > 0 &&
+    !publicKeys.find((pubKey) =>
+      isEqualEdDSAPublicKey(pubKey, claim.signer)
+    )
+  ) {
+    throw new Error(
+      "Signing key does not match any of the configured public keys"
+    );
+  }
+
+  const productIds = new Set(ETH_BERLIN_CONFIG.map((em) => em.productId));
+
+  if (
+    productIds.size > 0 &&
+    pcd.claim.partialTicket.productId &&
+    !productIds.has(pcd.claim.partialTicket.productId)
+  ) {
+    throw new Error(
+      "Product ID does not match any of the configured product IDs"
+    );
+  }
+
+  return pcd;
+}
 
 const ETH_BERLIN_CONFIG = [
   {
